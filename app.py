@@ -59,31 +59,40 @@ class ChatSession:
             # Add user message to history
             self.add_message(HumanMessage(content=message))
             
-            # Generate response
             if image_data:
-                # Analyze image - only pass image_data and message
+                # Handle image analysis
                 analysis = self.image_agent.analyze_image(
                     image_data=image_data,
                     user_query=message
                 )
                 
-                # Create response combining caption and issues
                 response_text = f"I see {analysis['description']}. "
                 if analysis['detected_issues']:
                     response_text += "\n\nI've detected the following issues:\n"
                     for issue in analysis['detected_issues']:
                         response_text += f"- {issue['issue']} (Severity: {issue['severity']}): {issue['description']}\n"
                 
-                # Add the response to chat history
                 self.add_message(AIMessage(content=response_text))
                 return response_text
             else:
-                # Handle text-only messages
-                messages = [msg for msg in self.chat_history]
-                response = self.agent_router.route_to_agent(
+                # Get relevant context from RAG system
+                relevant_context = self.rag_system.get_relevant_context(message)
+                print(f"Retrieved relevant context: {relevant_context[:200]}...")  # Print first 200 chars for debugging
+                
+                # Format chat history for the text generation service
+                formatted_history = [
+                    {"role": "user" if isinstance(msg, HumanMessage) else "assistant", 
+                     "content": msg.content}
+                    for msg in self.chat_history[:-1]  # Exclude the last message as it's the current one
+                ]
+                
+                # Generate response with context
+                response = self.text_gen_service.generate_response(
                     message=message,
-                    chat_history=messages
+                    chat_history=formatted_history,
+                    context=relevant_context
                 )
+                
                 self.add_message(AIMessage(content=response))
                 return response
 
@@ -141,6 +150,8 @@ def reset_session():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
 
 
 

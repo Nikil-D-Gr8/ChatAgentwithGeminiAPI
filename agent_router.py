@@ -7,37 +7,31 @@ from text_agent import TextGenerationService
 
 class AgentRouter:
     def __init__(self, text_generation_service: TextGenerationService):
-        self.text_gen_service = text_generation_service
+        self.text_generation_service = text_generation_service
 
-    def route_to_agent(self, message: str, chat_history: List[BaseMessage]) -> str:
+    def route_to_agent(self, message: str, chat_history: List[BaseMessage], context: Optional[str] = None) -> str:
         """Route the message to appropriate agent and return response"""
-        print(f"\nRouting message with chat history length: {len(chat_history)}")
-        
         try:
-            # Format chat history for the LLM
-            formatted_history = []
-            for msg in chat_history:
-                if isinstance(msg, SystemMessage):
-                    formatted_history.append({"role": "system", "content": msg.content})
-                elif isinstance(msg, HumanMessage):
-                    formatted_history.append({"role": "user", "content": msg.content})
-                elif isinstance(msg, AIMessage):
-                    formatted_history.append({"role": "assistant", "content": msg.content})
-            
-            print("Formatted chat history:")
-            for idx, msg in enumerate(formatted_history):
-                print(f"{idx}: {msg['role']} - {msg['content'][:50]}...")
+            # Combine context with the message if available
+            if context:
+                augmented_message = (
+                    "Using the following context to answer the question:\n\n"
+                    f"{context}\n\n"
+                    f"Question: {message}\n"
+                    "Please provide a relevant answer based on the context above."
+                )
+            else:
+                augmented_message = message
 
-            # Generate response using the text generation service
-            response = self.text_gen_service.generate_response(
-                message=message,
-                chat_history=formatted_history
+            # Use the augmented message with the text generation service
+            response = self.text_generation_service.generate_text(
+                user_message=augmented_message,
+                chat_history=chat_history
             )
-            
             return response
 
         except Exception as e:
-            print(f"Error in AgentRouter: {str(e)}")
-            traceback.print_exc()
-            return f"I apologize, but I encountered an error: {str(e)}"
+            print(f"Error in agent router: {str(e)}")
+            raise
+
 
