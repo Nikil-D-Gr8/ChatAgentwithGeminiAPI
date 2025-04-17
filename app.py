@@ -50,116 +50,92 @@ class ChatSession:
             print(f"Message {idx}: {type(msg).__name__} - {msg.content[:50]}...")
         return self.chat_history
 
-    def generate_response(self, message: str, image_data: Optional[str] = None) -> str:
-        """Generate a response using the chat history"""
+    def process_message(self, message_content: str, image_data: Optional[str] = None):
         try:
-            print(f"\nGenerating response for session {self.session_id}")
-            print(f"Current chat history length: {len(self.chat_history)}")
-            
-            # Add user message to history
-            self.add_message(HumanMessage(content=message))
-            
+            # First, add the user's message to history
+            self.add_message(HumanMessage(content=message_content))
+
+            # If there's an image, process it and use image analysis as context
             if image_data:
-                # Handle image analysis
-                analysis = self.image_agent.analyze_image(
-                    image_data=image_data,
-                    user_query=message
-                )
+                image_analysis = self.image_agent.analyze_image(image_data, message_content)
                 
-                response_text = f"I see {analysis['description']}. "
-                if analysis['detected_issues']:
-                    response_text += "\n\nI've detected the following issues:\n"
-                    for issue in analysis['detected_issues']:
-                        response_text += f"- {issue['issue']} (Severity: {issue['severity']}): {issue['description']}\n"
+                # Create a combined message with image caption and detected issues
+                image_context = f"Image Analysis:\n{image_analysis['description']}"
+                if image_analysis['detected_issues']:
+                    issues_text = "\nDetected Issues:\n" + "\n".join(
+                        [f"- {issue['issue']}: {issue['description']} (Severity: {issue['severity']})" 
+                         for issue in image_analysis['detected_issues']]
+                    )
+                    image_context += issues_text
                 
-                self.add_message(AIMessage(content=response_text))
-                return response_text
-            else:
-                # Get relevant context from RAG system
-                relevant_context = self.rag_system.get_relevant_context(message)
-                print(f"Retrieved relevant context: {relevant_context[:200]}...")  # Print first 200 chars for debugging
-                
-                # Format chat history for the text generation service
-                formatted_history = [
-                    {"role": "user" if isinstance(msg, HumanMessage) else "assistant", 
-                     "content": msg.content}
-                    for msg in self.chat_history[:-1]  # Exclude the last message as it's the current one
-                ]
-                
-                # Generate response with context
+                # Generate response using image analysis as context
                 response = self.text_gen_service.generate_response(
-                    message=message,
-                    chat_history=formatted_history,
-                    context=relevant_context
+                    user_message=message_content,
+                    chat_history=self.chat_history,
+                    context=image_context
                 )
+
+            # If no image, use RAG system to get relevant context
+            else:
+                context = self.rag_system.get_relevant_context(message_content)
+                print(f"Retrieved context: {context[:200]}...")  # Log first 200 chars
                 
-                self.add_message(AIMessage(content=response))
-                return response
+                response = self.text_gen_service.generate_response(
+                    user_message=message_content,
+                    chat_history=self.chat_history,
+                    context=context
+                )
+
+            # Add the AI response to history
+            self.add_message(AIMessage(content=response))
+
+            return {
+                "response": response,
+                "session_id": self.session_id
+            }
 
         except Exception as e:
-            error_msg = f"Error generating response: {str(e)}"
-            print(error_msg)
             traceback.print_exc()
-            return error_msg
+            error_message = f"Error processing message: {str(e)}"
+            print(error_message)
+            return {
+                "error": error_message,
+                "session_id": self.session_id
+            }
 
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
-        data = request.get_json()
-        if not data or 'message' not in data:
-            return jsonify({'error': 'No message provided'}), 400
-
-        message = data['message']
+        data = request.json
+        message = data.get('message', '')
         session_id = data.get('session_id')
         image_data = data.get('image')
-
+        
         # Get or create session
         if session_id and session_id in chat_sessions:
-            print(f"Using existing session: {session_id}")
             session = chat_sessions[session_id]
         else:
-            print(f"Creating new session (old session_id was: {session_id})")
             session = ChatSession()
             chat_sessions[session.session_id] = session
-            print(f"New session created with ID: {session.session_id}")
+            session_id = session.session_id
 
-        # Generate response
-        response = session.generate_response(message, image_data)
+        # Process message and get response
+        response = session.process_message(message, image_data)
 
         return jsonify({
-            'response': response,
+            'response': response.get('response'),
             'session_id': session.session_id
         })
 
     except Exception as e:
         print(f"Error in chat endpoint: {str(e)}")
+        traceback.print_exc()
         return jsonify({
             'error': str(e)
         }), 500
 
-@app.route('/reset', methods=['POST'])
-def reset_session():
-    data = request.json
-    session_id = data.get('session_id')
-    
-    if session_id and session_id in chat_sessions:
-        del chat_sessions[session_id]
-        return jsonify({'status': 'success', 'message': 'Session reset successfully'})
-    
-    return jsonify({'status': 'error', 'message': 'Session not found'}), 404
-
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
 
 
 
