@@ -3,6 +3,7 @@ import uuid
 import traceback
 from typing import Optional
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Add this import
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
 from RAGsystem import RAGSystem
@@ -11,6 +12,7 @@ from image_agent import PropertyIssueDetectionAgent
 from agent_router import AgentRouter
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 chat_sessions = {}  # Global dictionary to store chat sessions
 
 class ChatSession:
@@ -100,6 +102,7 @@ def chat():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 

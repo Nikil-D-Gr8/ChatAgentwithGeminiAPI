@@ -56,7 +56,7 @@ class PropertyIssueDetectionAgent:
             if 'crack' in caption.lower():
                 detected_issues.append({
                     'issue': 'Cracks present',
-                    'severity': 'Medium',
+                    'severity': 'High',
                     'description': 'Cracks may indicate structural issues or settling'
                 })
             
@@ -71,7 +71,7 @@ class PropertyIssueDetectionAgent:
 
 if __name__ == "__main__":
     agent = PropertyIssueDetectionAgent()
-    result = agent.analyze_image("path/to/your/property.jpg")
+    result = agent.analyze_image("moldup.jpeg")
 
     print("\n--- Results ---")
     print("Description:", result["description"])
